@@ -34,7 +34,7 @@ bool generate_asm(FILE* fp, node_root_t* root) {
         // curr = curr->next;
     }
 
-    return true;
+    return true; // TODO: change back
 }
 
 bool ga_function(FILE* fp, node_func_t* func) {
@@ -48,11 +48,92 @@ bool ga_statement(FILE* fp, node_stat_t* stat) {
     return true;
 }
 
+// sum eax, with next term store in eax
+bool ga_subexpression(FILE* fp, node_exp_subexp_t* sub) {
+    fputs("\tmovl\t%eax, %ecx\n", fp);
+    if(!ga_term(fp, sub->term)) return false;
+
+    if(sub->operator == OPERATOR_ADD) {
+        fputs("\taddl\t%ecx, %eax\n", fp);
+        return true;
+    } else if(sub->operator == OPERATOR_MINUS) {
+        fputs("\tsubl\t%eax, %ecx\n", fp);
+        fputs("\txchg\t%eax, %ecx\n", fp);
+        return true;
+    }
+
+    return false;
+}
+
 bool ga_expression(FILE* fp, node_exp_t* exp) {
-    assert(fp && exp);
+    if(!ga_term(fp, exp->term)) return false;
+    //fputs("\tpush\t%eax\n", fp);
 
+    node_exp_subexp_t* sub = exp->subexps;
+    while(sub) {
+        if(!ga_subexpression(fp, sub)) return false;
+        sub = sub->next;
+    }
 
+    return true;
+}
 
-    printf("Failed to generate expression nodes assembly\n");
+// mult eax, with next subterm (can't use ecx)
+bool ga_subterm(FILE* fp, node_term_subterm_t* term) {
+    fputs("\tmovl\t%eax, %ebx\n", fp);
+    ga_factor(fp, term->factor);
+
+    if(term->operator == OPERATOR_MULT) {
+        fputs("\timul\t%ebx, %eax\n", fp);
+        return true;
+    } else if(term->operator == OPERATOR_DIVID) {
+        fputs("\txchg\t%eax, %ebx\n\tcdq\n", fp);
+        fputs("\tidiv\t%ebx\n", fp);
+        return true;
+    }
+
+    return false;
+}
+
+// save result in eax
+bool ga_term(FILE* fp, node_term_t* term) {
+    if(!ga_factor(fp, term->factor)) return false;
+    
+    node_term_subterm_t* sub = term->subterms;
+    while(sub) {
+        if(!ga_subterm(fp, sub)) return false;
+        sub = sub->next;
+    }
+
+    return true;
+}
+
+// set eax to factors value, save ebx, ecx
+bool ga_factor(FILE* fp, node_factor_t* factor) {
+    if(factor->type == FACTOR_CONST) {
+        fprintf(fp, "\tmovl\t$%u, %%eax\n", factor->literal);
+        return true;
+    } else if(factor->type == FACTOR_UNARY_OP) {
+        if(!ga_factor(fp, factor->factor)) return false;
+        switch(factor->operator) {
+        case OPERATOR_BITWISE_COMPLEMENT:
+            fputs("\tnot\t\t%eax\n", fp);
+            return true;
+        case OPERATOR_MINUS:
+            fputs("\tneg\t\t%eax\n", fp);
+            return true;
+        case OPERATOR_LOGICAL_NOT:
+            fputs("\tcmpl\t$0, %eax\n\tmovl\t$0, %eax\n\tsete\t%al\n", fp);
+            return true;
+        default:
+            return false;
+        }
+    } else if(factor->type == FACTOR_PAREN) {
+        fputs("\tpush\t%ebx\n\tpush\t%ecx\n", fp);
+        if(!ga_expression(fp, factor->exp)) return false;
+        fputs("\tpop\t\t%ecx\n\tpop\t\t%ebx\n", fp);
+        return true;
+    }
+
     return false;
 }

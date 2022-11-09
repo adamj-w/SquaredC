@@ -18,11 +18,15 @@ HCC_OBJECTS=$(patsubst $(SRCDIR)/%,$(OUTDIR)/%.o,$(HCC_SOURCES))
 all: $(BINARY)
 
 run: $(BINARY)
-	$(BINARY) $(CWD)/write_a_c_compiler/stage_3/valid/unop_parens.c -vv
+	$(BINARY) $(CWD)/tests/write_a_c_compiler/stage_3/valid/add.c -vv
 
 test: $(BINARY)
-	@cd write_a_c_compiler/; \
+	@cd tests/write_a_c_compiler/; \
 		./test_compiler.sh $(BINARY) 3
+
+test-all: $(BINARY)
+	@cd tests/write_a_c_compiler/; \
+		./test_compiler.sh $(BINARY)
 
 clean:
 	@rm -r $(OUTDIR)

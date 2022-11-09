@@ -142,9 +142,9 @@ node_term_t* parse_term(token_t** list) {
     term->factor = parse_factor(&curr);
     if(!term->factor) goto fail;
     token_t* peek = curr->next;
-    if(!peek || 
-        peek->type != TOKEN_OPERATOR || 
-        (peek->operator_type != OPERATOR_MULT || peek->operator_type != OPERATOR_DIVID)) goto done;
+    if(!peek || peek->type != TOKEN_OPERATOR) goto done;
+    if(peek->operator_type != OPERATOR_MULT && peek->operator_type != OPERATOR_DIVID) goto done;
+    NEXT(curr);
 
     ZMALLOC(node_term_subterm_t, term->subterms);
     node_term_subterm_t* sub = term->subterms;
@@ -156,10 +156,10 @@ node_term_t* parse_term(token_t** list) {
         sub->factor = parse_factor(&curr);
         if(!sub->factor) goto fail;
         peek = curr->next;
-        if(!peek || 
-            peek->type != TOKEN_OPERATOR || 
-            (peek->operator_type != OPERATOR_MULT || peek->operator_type != OPERATOR_DIVID)) 
-            break;
+
+        if(!peek || peek->type != TOKEN_OPERATOR) break;
+        if(peek->operator_type != OPERATOR_MULT && peek->operator_type != OPERATOR_DIVID) break;
+
         NEXT(curr);
         ZMALLOC(node_term_subterm_t, sub->next);
         sub = sub->next;
