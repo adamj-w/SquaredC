@@ -107,7 +107,7 @@ fail:
         system(cmd_buf);
         free(cmd_buf);
 
-        //remove(outassembly);
+        remove(outassembly);
     }
 
     free(outassembly);

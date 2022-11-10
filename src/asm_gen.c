@@ -60,13 +60,17 @@ bool ga_expression(ga_data_t* data, node_exp_t* exp) {
     if(!ga_exp_and(data, exp->and_exp)) return false;
 
     // TODO:
-    // node_exp_subexp_t* sub = exp->subexps;
-    // while(sub) {
+    node_exp_subexp_t* sub = exp->subexps;
+    while(sub) {
+        size_t currIndex = data->label_index++;
+        fprintf(data->fp, "\tcmpl\t$0, %%eax\n\tje\t\t.o%02lu\n\tmovl\t$1, %%eax\n\tjmp\t\t.oe%02lu\n.o%02lu:\n", currIndex, currIndex, currIndex);
+        
+        if(!ga_exp_and(data, sub->and_exp)) return false;
 
-    //     fputs("\tpush\t%eax\n");
-    //     if(!ga_exp_and(data, exp->and_exp)) return false;
-    //     fputs("\tpop\t\t%ebx\n");
-    // }
+        fprintf(data->fp, "\tcmpl\t$0, %%eax\n\tmovl\t$0, %%eax\n\tsetne\t%%al\n.oe%02lu:\n", currIndex);
+
+        sub = sub->next;
+    }
     
     return true;
 }
@@ -74,7 +78,17 @@ bool ga_expression(ga_data_t* data, node_exp_t* exp) {
 bool ga_exp_and(ga_data_t* data, node_exp_and_t* and) {
     if(!ga_exp_equals(data, and->equals)) return false;
 
-    // TODO:
+    node_exp_and_subexp_t* sub = and->subexps;
+    while(sub) {
+        size_t currIndex = data->label_index++;
+        fprintf(data->fp, "\tcmpl\t$0, %%eax\n\tjne\t\t.a%02lu\n\tjmp\t\t.ae%02lu\n.a%02lu:\n", currIndex, currIndex, currIndex);
+        
+        if(!ga_exp_equals(data, sub->equals)) return false;
+
+        fprintf(data->fp, "\tcmpl\t$0, %%eax\n\tmovl\t$0, %%eax\n\tsetne\t%%al\n.ae%02lu:\n", currIndex);
+
+        sub = sub->next;
+    }
 
     return true;
 }
@@ -89,6 +103,8 @@ bool ga_exp_equals(ga_data_t* data, node_exp_equals_t* equals) {
 
         if(sub->operator == OPERATOR_EQUALS) {
             fputs("\tpop\t\t%ecx\n\tcmpl\t%eax, %ecx\n\tmovl\t$0, %eax\n\tsete\t%al\n", data->fp);
+        } else if(sub->operator == OPERATOR_NOT_EQUAL) {
+            fputs("\tpop\t\t%ecx\n\tcmpl\t%eax, %ecx\n\tmovl\t$0, %eax\n\tsetne\t%al\n", data->fp);
         } else
             return false;
 
@@ -103,7 +119,24 @@ bool ga_exp_relation(ga_data_t* data, node_exp_relation_t* relation) {
 
     node_exp_relation_subexp_t* sub = relation->subexps;
     while(sub) {
-        // TODO:
+        fputs("\tpush\t%eax\n", data->fp);
+        if(!ga_exp_sum(data, sub->sum)) return false;
+
+        fputs("\tpop\t\t%ecx\n\tcmpl\t%eax, %ecx\n\tmovl\t$0, %eax\n\tset", data->fp);
+        if(sub->relation == OPERATOR_LESS_THAN) {
+            fputc('l', data->fp);
+        } else if(sub->relation == OPERATOR_LESS_THAN_OR_EQUAL) {
+            fputc('l', data->fp);
+            fputc('e', data->fp);
+        } else if(sub->relation == OPERATOR_GREATER_THAN) {
+            fputc('g', data->fp);
+        } else if(sub->relation == OPERATOR_GREATER_THAN_OR_EQUAL) {
+            fputc('g', data->fp);
+            fputc('e', data->fp);
+        } else
+            return false;
+        
+        fputs("\t%al\n", data->fp);
 
         sub = sub->next;
     }
