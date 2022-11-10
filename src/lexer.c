@@ -29,6 +29,11 @@ const char* keyword_type_names[KEYWORD_TYPE_COUNT] = {
     KEYWORD_TYPE_LIST(STIRNG_LIST_ITEM, _)
 };
 
+#define CREATE_NEXT(_curr) \
+            ZMALLOC(token_t, _curr->next); \
+            _curr->next->prev = _curr; \
+            _curr = _curr->next
+
 token_t* lex(const char* content, size_t len) {
     assert(len > 0);
     assert(content);
@@ -37,7 +42,8 @@ token_t* lex(const char* content, size_t len) {
     ZMALLOC(token_t, head);
     token_t* curr = head;
     for(size_t i = 0; i < len; ++i) {
-        char c = content[i];
+        char c = content[i], n = 0;
+        if(i < len) n = content[i + 1];
         if(c == '\0') break;
 
         if(c == ' ' || c == '\n') continue; // end current token
@@ -46,95 +52,123 @@ token_t* lex(const char* content, size_t len) {
 
         if(c == '{') {
             curr->type = TOKEN_OPEN_BRACE;
-            ZMALLOC(token_t, curr->next);
-            curr->next->prev = curr;
-            curr = curr->next;
+            CREATE_NEXT(curr);
             continue;
         }
         
         if(c == '}') {
             curr->type = TOKEN_CLOSE_BRACE;
-            ZMALLOC(token_t, curr->next);
-            curr->next->prev = curr;
-            curr = curr->next;
+            CREATE_NEXT(curr);
             continue;
         }
 
         if(c == '(') {
             curr->type = TOKEN_OPEN_PAREN;
-            ZMALLOC(token_t, curr->next);
-            curr->next->prev = curr;
-            curr = curr->next;
+            CREATE_NEXT(curr);
             continue;
         }
         
         if(c == ')') {
             curr->type = TOKEN_CLOSE_PAREN;
-            ZMALLOC(token_t, curr->next);
-            curr->next->prev = curr;
-            curr = curr->next;
+            CREATE_NEXT(curr);
             continue;
         }
 
         if(c == ';') {
             curr->type = TOKEN_SEMICOLON;
-            ZMALLOC(token_t, curr->next);
-            curr->next->prev = curr;
-            curr = curr->next;
+            CREATE_NEXT(curr);
+            continue;
+        }
+
+        if(c == '=' && n == '=') {
+            curr->type = TOKEN_OPERATOR;
+            curr->operator_type = OPERATOR_EQUALS;
+            i++;
+            CREATE_NEXT(curr);
             continue;
         }
 
         if(c == '+') {
             curr->type = TOKEN_OPERATOR;
             curr->operator_type = OPERATOR_ADD;
-            ZMALLOC(token_t, curr->next);
-            curr->next->prev = curr;
-            curr = curr->next;
+            CREATE_NEXT(curr);
             continue;
         }
 
         if(c == '-') {
             curr->type = TOKEN_OPERATOR;
             curr->operator_type = OPERATOR_MINUS;
-            ZMALLOC(token_t, curr->next);
-            curr->next->prev = curr;
-            curr = curr->next;
+            CREATE_NEXT(curr);
             continue;
         }
 
         if(c == '*') {
             curr->type = TOKEN_OPERATOR;
             curr->operator_type = OPERATOR_MULT;
-            ZMALLOC(token_t, curr->next);
-            curr->next->prev = curr;
-            curr = curr->next;
+            CREATE_NEXT(curr);
             continue;
         }
 
         if(c == '/') {
             curr->type = TOKEN_OPERATOR;
             curr->operator_type = OPERATOR_DIVID;
-            ZMALLOC(token_t, curr->next);
-            curr->next->prev = curr;
-            curr = curr->next;
+            CREATE_NEXT(curr);
             continue;
         }
 
         if(c == '~') {
             curr->type = TOKEN_OPERATOR;
             curr->operator_type = OPERATOR_BITWISE_COMPLEMENT;
-            ZMALLOC(token_t, curr->next);
-            curr->next->prev = curr;
-            curr = curr->next;
+            CREATE_NEXT(curr);
             continue;
         }
 
         if(c == '!') {
             curr->type = TOKEN_OPERATOR;
-            curr->operator_type = OPERATOR_LOGICAL_NOT;
-            ZMALLOC(token_t, curr->next);
-            curr->next->prev = curr;
-            curr = curr->next;
+            if(n == '=') {
+                curr->operator_type = OPERATOR_NOT_EQUAL;
+                i++;
+            } else
+                curr->operator_type = OPERATOR_LOGICAL_NOT;
+            CREATE_NEXT(curr);
+            continue;
+        }
+
+        if(c == '<') {
+            curr->type = TOKEN_OPERATOR;
+            if(n == '=') {
+                curr->operator_type = OPERATOR_LESS_THAN_OR_EQUAL;
+                i++;
+            } else
+                curr->operator_type = OPERATOR_LESS_THAN;
+            CREATE_NEXT(curr);
+            continue;
+        }
+
+        if(c == '>') {
+            curr->type = TOKEN_OPERATOR;
+            if(n == '=') {
+                curr->operator_type = OPERATOR_GREATER_THAN_OR_EQUAL;
+                i++;
+            } else
+                curr->operator_type = OPERATOR_GREATER_THAN;
+            CREATE_NEXT(curr);
+            continue;
+        }
+
+        if(c == '&' && n == '&') {
+            curr->type = TOKEN_OPERATOR;
+            curr->operator_type = OPERATOR_AND;
+            i++;
+            CREATE_NEXT(curr);
+            continue;
+        }
+
+        if(c == '|' && n == '|') {
+            curr->type = TOKEN_OPERATOR;
+            curr->operator_type = OPERATOR_OR;
+            i++;
+            CREATE_NEXT(curr);
             continue;
         }
 
@@ -144,9 +178,7 @@ token_t* lex(const char* content, size_t len) {
         if(strncmp("int", remaining, 3) == 0 && (isblank(remaining[3]) || remaining[3] == '\n')) { // TODO: need special strncmp for non-case sensitive compare and for checking stuff after
             curr->type = TOKEN_BUILTIN_TYPE;
             curr->builtin_type = BUILTIN_INT;
-            ZMALLOC(token_t, curr->next);
-            curr->next->prev = curr;
-            curr = curr->next;
+            CREATE_NEXT(curr);
             i += 3;
             continue;
         }
@@ -154,9 +186,7 @@ token_t* lex(const char* content, size_t len) {
         if(strncmp("return", remaining, 6) == 0 && (isblank(remaining[6]) || remaining[6] == '\n')) {
             curr->type = TOKEN_KEYWORD;
             curr->keyword_type = KEYWORD_RETURN;
-            ZMALLOC(token_t, curr->next);
-            curr->next->prev = curr;
-            curr = curr->next;
+            CREATE_NEXT(curr);
             i += 6;
             continue;
         }
@@ -177,9 +207,7 @@ token_t* lex(const char* content, size_t len) {
             
             curr->type = TOKEN_LITERAL;
             curr->literal_value = num;
-            ZMALLOC(token_t, curr->next);
-            curr->next->prev = curr;
-            curr = curr->next;
+            CREATE_NEXT(curr);
             i = j - 1;
             continue;
         }
@@ -198,9 +226,7 @@ token_t* lex(const char* content, size_t len) {
             curr->name_owner = 1;
             strncpy(curr->name, &content[i], j - i);
             curr->name[j-i] = '\0';
-            ZMALLOC(token_t, curr->next);
-            curr->next->prev = curr;
-            curr = curr->next;
+            CREATE_NEXT(curr);
             i = j-1;
             continue;
         }

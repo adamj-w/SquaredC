@@ -9,6 +9,8 @@
 #include "parser.h"
 #include "fwd.h"
 
+// UNARY OPS, LITERALS, and PARENS
+
 typedef enum factor_type_e {
     FACTOR_INVALID,
     FACTOR_PAREN,
@@ -35,6 +37,8 @@ node_factor_t* parse_factor(token_t** list);
 void free_factor(node_factor_t* factor);
 void debug_print_node_factor(node_factor_t* factor);
 
+// MULT and DIFF
+
 typedef struct AST_term_subterm_s {
     operator_type operator;
     struct AST_factor_s* factor;
@@ -55,19 +59,97 @@ node_term_t* parse_term(token_t** list);
 void free_term(node_term_t* term);
 void debug_print_node_term(node_term_t* term);
 
-typedef struct AST_expression_subexpression_s {
+// SUM and DIFF
+
+typedef struct AST_exp_sum_subexpression_s {
     operator_type operator;
     struct AST_term_s* term;
+    struct AST_exp_sum_subexpression_s* next;
+} node_exp_sum_subexp_t;
 
+typedef struct AST_exp_sum_s {
+    node_t node;
+
+    struct AST_term_s* term;
+
+    node_exp_sum_subexp_t* subexps;
+} node_exp_sum_t;
+
+node_exp_sum_t* parse_exp_sum(token_t** list);
+void free_exp_sum(node_exp_sum_t* exp);
+void debug_print_node_exp_sum(node_exp_sum_t* exp);
+
+// GREATER_THAN, LESS_THAN, etc
+
+typedef struct AST_exp_relation_subexpression_s {
+    operator_type relation;
+    struct AST_exp_sum_s* sum;
+    struct AST_exp_relation_subexpression_s* next;
+} node_exp_relation_subexp_t;
+
+typedef struct AST_exp_relation_s {
+    node_t node;
+
+    struct AST_exp_sum_s* sum;
+
+    node_exp_relation_subexp_t* subexps;
+} node_exp_relation_t;
+
+node_exp_relation_t* parse_exp_relation(token_t** list);
+void free_exp_relation(node_exp_relation_t* exp);
+void debug_print_node_exp_relation(node_exp_relation_t* exp);
+
+// EQUAL and NOT_EQUAL
+
+typedef struct AST_exp_equals_subexpression_s {
+    operator_type operator;
+    struct AST_exp_relation_s* relation;
+    struct AST_exp_equals_subexpression_s* next;
+} node_exp_equals_subexp_t;
+
+typedef struct AST_exp_equals_s {
+    node_t node;
+
+    struct AST_exp_relation_s* relation;
+
+    node_exp_equals_subexp_t* subexps;
+} node_exp_equals_t;
+
+node_exp_equals_t* parse_exp_equals(token_t** list);
+void free_exp_equals(node_exp_equals_t* exp);
+void debug_print_node_exp_equals(node_exp_equals_t* exp);
+
+// AND
+
+typedef struct AST_exp_and_subexpression_s {
+    struct AST_exp_equals_s* equals;
+    struct AST_exp_and_subexpression_s* next;
+} node_exp_and_subexp_t;
+
+typedef struct AST_exp_and_s {
+    node_t node;
+
+    struct AST_exp_equals_s* equals;
+
+    node_exp_and_subexp_t* subexps;
+} node_exp_and_t;
+
+node_exp_and_t* parse_exp_and(token_t** list);
+void free_exp_and(node_exp_and_t* exp);
+void debug_print_node_exp_and(node_exp_and_t* exp);
+
+// OR
+
+typedef struct AST_expression_subexpression_s {
+    struct AST_exp_and_s* and_exp;
     struct AST_expression_subexpression_s* next;
 } node_exp_subexp_t;
 
 typedef struct AST_expression_s {
     node_t node;
 
-    struct AST_term_s* term;
+    struct AST_exp_and_s* and_exp;
 
-    size_t subexp_count;
     node_exp_subexp_t* subexps;
 } node_exp_t;
 

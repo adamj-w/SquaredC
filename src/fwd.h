@@ -37,17 +37,28 @@ extern const char* builtin_type_names[BUILTIN_TYPE_COUNT];
 #define OPERATOR_TYPE_LIST(__item, _uargs) \
     __item(INVALID, _uargs) \
     __item(ADD, _uargs) \
-    __item(MINUS, _uargs) \
     __item(MULT, _uargs) \
     __item(DIVID, _uargs) \
+    __item(MINUS, _uargs) \
     __item(BITWISE_COMPLEMENT, _uargs) \
-    __item(LOGICAL_NOT, _uargs) 
+    __item(LOGICAL_NOT, _uargs) \
+    __item(AND, _uargs) \
+    __item(OR, _uargs) \
+    __item(EQUALS, _uargs) \
+    __item(NOT_EQUAL, _uargs) \
+    __item(LESS_THAN, _uargs) \
+    __item(LESS_THAN_OR_EQUAL, _uargs) \
+    __item(GREATER_THAN, _uargs) \
+    __item(GREATER_THAN_OR_EQUAL, _uargs)
 
 typedef enum operator_type_e {
     OPERATOR_TYPE_LIST(ENUM_LIST_ITEM, OPERATOR_)
     OPERATOR_TYPE_COUNT
 } operator_type;
 extern const char* operator_type_names[OPERATOR_TYPE_COUNT];
+
+#define IS_BITWISE(_op) (OPERATOR_MINUS<= (_op) && (_op) <= OPERATOR_LOGICAL_NOT)
+#define IS_RELATION(_op) (OPERATOR_LESS_THAN <= (_op) && (_op) <= OPERATOR_GREATER_THAN_OR_EQUAL)
 
 #define KEYWORD_TYPE_LIST(__item, _uargs) \
     __item(INVALID, _uargs) \

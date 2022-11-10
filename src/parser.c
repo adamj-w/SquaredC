@@ -203,20 +203,24 @@ void debug_print_node_term(node_term_t* term) {
     }
 }
 
-node_exp_t* parse_expression(token_t** list) {
+// ADD, expressions
+
+node_exp_sum_t* parse_exp_sum(token_t** list) {
     token_t* curr = *list;
 
-    node_exp_t* exp;
-    ZMALLOC(node_exp_t, exp);
-    exp->node.type = NODE_EXPRESSION;
+    node_exp_sum_t* sum;
+    ZMALLOC(node_exp_sum_t, sum);
+    sum->node.type = NODE_EXPRESSION;
 
-    exp->term = parse_term(&curr);
-    if(!exp->term) goto fail;
-    if(PEEK(curr)->type != TOKEN_OPERATOR) goto ret;
+    sum->term = parse_term(&curr);
+    if(!sum->term) goto fail;
+    token_t* peek = curr->next;
+    if(!peek || peek->type != TOKEN_OPERATOR) goto done;
+    if(peek->operator_type != OPERATOR_ADD && peek->operator_type != OPERATOR_MINUS) goto done;
     NEXT(curr);
 
-    ZMALLOC(node_exp_subexp_t, exp->subexps);
-    node_exp_subexp_t* subexp = exp->subexps;
+    ZMALLOC(node_exp_sum_subexp_t, sum->subexps);
+    node_exp_sum_subexp_t* subexp = sum->subexps;
     while(1) {
         assert(curr->operator_type == OPERATOR_ADD || curr->operator_type == OPERATOR_MINUS);
         subexp->operator = curr->operator_type;
@@ -225,13 +229,301 @@ node_exp_t* parse_expression(token_t** list) {
         subexp->term = parse_term(&curr);
         if(!subexp->term) goto fail;
 
+        peek = curr->next;
+        if(!peek || peek->type != TOKEN_OPERATOR) break;
+        if(peek->operator_type != OPERATOR_ADD && peek->operator_type != OPERATOR_MINUS) break;
+
+        NEXT(curr);
+        ZMALLOC(node_exp_sum_subexp_t, subexp->next);
+        subexp = subexp->next;
+    }    
+
+done:
+    *list = curr;
+    return sum;
+
+fail:
+    free_exp_sum(sum);
+    return NULL;
+}
+
+void free_exp_sum(node_exp_sum_t* sum) {
+    if(sum) {
+        free_term(sum->term);
+
+        if(sum->subexps) {
+            node_exp_sum_subexp_t* sub = sum->subexps;
+            while(sub) {
+                node_exp_sum_subexp_t* next = sub->next;
+                free_term(sub->term);
+                free(sub);
+                sub = next;
+            }
+        }
+
+        free(sum);
+    }
+}
+
+void debug_print_node_exp_sum(node_exp_sum_t* sum) {
+    debug_print_node_term(sum->term);
+
+    node_exp_sum_subexp_t* sub = sum->subexps;
+    while(sub) {
+        printf("%s ", operator_type_names[sub->operator]);
+        debug_print_node_term(sub->term);
+        sub = sub->next;
+    }
+}
+
+// GREATER_THAN, etc expressions
+
+node_exp_relation_t* parse_exp_relation(token_t** list) {
+    token_t* curr = *list;
+
+    node_exp_relation_t* relation;
+    ZMALLOC(node_exp_relation_t, relation);
+    relation->node.type = NODE_EXPRESSION;
+
+    relation->sum = parse_exp_sum(&curr);
+    if(!relation->sum) goto fail;
+    token_t* peek = curr->next;
+    if(!peek || peek->type != TOKEN_OPERATOR) goto done;
+    if(!IS_RELATION(peek->operator_type)) goto done;
+    NEXT(curr);
+
+    ZMALLOC(node_exp_relation_subexp_t, relation->subexps);
+    node_exp_relation_subexp_t* subexp = relation->subexps;
+    while(1) {
+        assert(IS_RELATION(curr->operator_type));
+        subexp->relation = curr->operator_type;
+        NEXT(curr);
+
+        subexp->sum = parse_exp_sum(&curr);
+        if(!subexp->sum) goto fail;
+
+        peek = curr->next;
+        if(!peek || peek->type != TOKEN_OPERATOR) break;
+        if(!IS_RELATION(peek->operator_type)) break;
+
+        NEXT(curr);
+        ZMALLOC(node_exp_relation_subexp_t, subexp->next);
+        subexp = subexp->next;
+    }    
+
+done:
+    *list = curr;
+    return relation;
+
+fail:
+    free_exp_relation(relation);
+    return NULL;
+}
+
+void free_exp_relation(node_exp_relation_t* relation) {
+    if(relation) {
+        free_exp_sum(relation->sum);
+
+        if(relation->subexps) {
+            node_exp_relation_subexp_t* sub = relation->subexps;
+            while(sub) {
+                node_exp_relation_subexp_t* next = sub->next;
+                free_exp_sum(sub->sum);
+                free(sub);
+                sub = next;
+            }
+        }
+
+        free(relation);
+    }
+}
+
+void debug_print_node_exp_relation(node_exp_relation_t* relation) {
+    debug_print_node_exp_sum(relation->sum);
+
+    node_exp_relation_subexp_t* sub = relation->subexps;
+    while(sub) {
+        printf("%s ", operator_type_names[sub->relation]);
+        debug_print_node_exp_sum(sub->sum);
+        sub = sub->next;
+    }
+}
+
+// EQUALS expressions
+
+node_exp_equals_t* parse_exp_equals(token_t** list) {
+    token_t* curr = *list;
+
+    node_exp_equals_t* equals;
+    ZMALLOC(node_exp_equals_t, equals);
+    equals->node.type = NODE_EXPRESSION;
+
+    equals->relation = parse_exp_relation(&curr);
+    if(!equals->relation) goto fail;
+    token_t* peek = curr->next;
+    if(!peek || peek->type != TOKEN_OPERATOR) goto done;
+    if(peek->operator_type != OPERATOR_EQUALS && peek->operator_type != OPERATOR_NOT_EQUAL) goto done;
+    NEXT(curr);
+
+    ZMALLOC(node_exp_equals_subexp_t, equals->subexps);
+    node_exp_equals_subexp_t* subexp = equals->subexps;
+    while(1) {
+        assert(curr->operator_type == OPERATOR_EQUALS || curr->operator_type == OPERATOR_NOT_EQUAL);
+        subexp->operator = curr->operator_type;
+        NEXT(curr);
+
+        subexp->relation = parse_exp_relation(&curr);
+        if(!subexp->relation) goto fail;
+
+        peek = curr->next;
+        if(!peek || peek->type != TOKEN_OPERATOR) break;
+        if(peek->operator_type != OPERATOR_EQUALS && peek->operator_type != OPERATOR_NOT_EQUAL) break;
+
+        NEXT(curr);
+        ZMALLOC(node_exp_equals_subexp_t, subexp->next);
+        subexp = subexp->next;
+    }    
+
+done:
+    *list = curr;
+    return equals;
+
+fail:
+    free_exp_equals(equals);
+    return NULL;
+}
+
+void free_exp_equals(node_exp_equals_t* equals) {
+    if(equals) {
+        free_exp_relation(equals->relation);
+
+        if(equals->subexps) {
+            node_exp_equals_subexp_t* sub = equals->subexps;
+            while(sub) {
+                node_exp_equals_subexp_t* next = sub->next;
+                free_exp_relation(sub->relation);
+                free(sub);
+                sub = next;
+            }
+        }
+
+        free(equals);
+    }
+}
+
+void debug_print_node_exp_equals(node_exp_equals_t* equals) {
+    debug_print_node_exp_relation(equals->relation);
+
+    node_exp_equals_subexp_t* sub = equals->subexps;
+    while(sub) {
+        printf("%s ", operator_type_names[sub->operator]);
+        debug_print_node_exp_relation(sub->relation);
+        sub = sub->next;
+    }
+}
+
+// AND expressions
+
+node_exp_and_t* parse_exp_and(token_t** list) {
+    token_t* curr = *list;
+
+    node_exp_and_t* and;
+    ZMALLOC(node_exp_and_t, and);
+    and->node.type = NODE_EXPRESSION;
+
+    and->equals = parse_exp_equals(&curr);
+    if(!and->equals) goto fail;
+    token_t* peek = curr->next;
+    if(!peek || peek->type != TOKEN_OPERATOR) goto done;
+    if(peek->operator_type != OPERATOR_AND) goto done;
+    NEXT(curr);
+
+    ZMALLOC(node_exp_and_subexp_t, and->subexps);
+    node_exp_and_subexp_t* subexp = and->subexps;
+    while(1) {
+        assert(curr->operator_type == OPERATOR_AND);
+        NEXT(curr);
+
+        subexp->equals = parse_exp_equals(&curr);
+        if(!subexp->equals) goto fail;
+
+        peek = curr->next;
+        if(!peek || peek->type != TOKEN_OPERATOR) break;
+        if(peek->operator_type != OPERATOR_AND) break;
+
+        NEXT(curr);
+        ZMALLOC(node_exp_and_subexp_t, subexp->next);
+        subexp = subexp->next;
+    }    
+
+done:
+    *list = curr;
+    return and;
+
+fail:
+    free_exp_and(and);
+    return NULL;
+}
+
+void free_exp_and(node_exp_and_t* and) {
+    if(and) {
+        free_exp_equals(and->equals);
+
+        if(and->subexps) {
+            node_exp_and_subexp_t* sub = and->subexps;
+            while(sub) {
+                node_exp_and_subexp_t* next = sub->next;
+                free_exp_equals(sub->equals);
+                free(sub);
+                sub = next;
+            }
+        }
+
+        free(and);
+    }
+}
+
+void debug_print_node_exp_and(node_exp_and_t* and) {
+    debug_print_node_exp_equals(and->equals);
+
+    node_exp_and_subexp_t* sub = and->subexps;
+    while(sub) {
+        printf("&& ");
+        debug_print_node_exp_equals(sub->equals);
+        sub = sub->next;
+    }
+}
+
+// OR expressions
+
+node_exp_t* parse_expression(token_t** list) {
+    token_t* curr = *list;
+
+    node_exp_t* exp;
+    ZMALLOC(node_exp_t, exp);
+    exp->node.type = NODE_EXPRESSION;
+
+    exp->and_exp = parse_exp_and(&curr);
+    if(!exp->and_exp) goto fail;
+    if(PEEK(curr)->type != TOKEN_OPERATOR) goto done;
+    NEXT(curr);
+
+    ZMALLOC(node_exp_subexp_t, exp->subexps);
+    node_exp_subexp_t* subexp = exp->subexps;
+    while(1) {
+        assert(curr->operator_type == OPERATOR_OR);
+        NEXT(curr);
+
+        subexp->and_exp = parse_exp_and(&curr);
+        if(!subexp->and_exp) goto fail;
+
         if(PEEK(curr)->type != TOKEN_OPERATOR) break;
         NEXT(curr);
         ZMALLOC(node_exp_subexp_t, subexp->next);
         subexp = subexp->next;
     }    
 
-ret:
+done:
     *list = curr;
     return exp;
 
@@ -242,13 +534,13 @@ fail:
 
 void free_expression(node_exp_t* exp) {
     if(exp) {
-        free_term(exp->term);
+        free_exp_and(exp->and_exp);
 
         if(exp->subexps) {
             node_exp_subexp_t* sub = exp->subexps;
             while(sub) {
                 node_exp_subexp_t* next = sub->next;
-                free_term(sub->term);
+                free_exp_and(sub->and_exp);
                 free(sub);
                 sub = next;
             }
@@ -259,12 +551,12 @@ void free_expression(node_exp_t* exp) {
 }
 
 void debug_print_node_expression(node_exp_t* exp) {
-    debug_print_node_term(exp->term);
+    debug_print_node_exp_and(exp->and_exp);
 
     node_exp_subexp_t* sub = exp->subexps;
     while(sub) {
-        printf("%s ", operator_type_names[sub->operator]);
-        debug_print_node_term(sub->term);
+        printf("|| ");
+        debug_print_node_exp_and(sub->and_exp);
         sub = sub->next;
     }
 }
