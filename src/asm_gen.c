@@ -32,7 +32,7 @@ bool ga_function(ga_data_t* data, node_func_t* func) {
 }
 
 bool ga_statement(ga_data_t* data, node_stat_t* stat) {
-    if(!ga_expression(data, stat->exp)) return false;
+    //if(!ga_expression(data, stat->exp)) return false;
     fprintf(data->fp, "\tret\n");
     return true;
 }

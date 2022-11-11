@@ -9,14 +9,14 @@
 #include "parser.h"
 #include "fwd.h"
 
-// UNARY OPS, LITERALS, and PARENS
+// UNARY OPS, LITERALS, and PARENS, VARS
 
-// TODO: variable type
 typedef enum factor_type_e {
     FACTOR_INVALID,
     FACTOR_PAREN,
     FACTOR_UNARY_OP,
     FACTOR_CONST,
+    FACTOR_VAR,
     FACTOR_TYPE_COUNT
 } factor_type;
 
@@ -31,6 +31,7 @@ typedef struct AST_factor_s {
         };
         struct AST_exp_or_s* exp;
         unsigned int literal;
+        const char* name;
     };
 } node_factor_t;
 

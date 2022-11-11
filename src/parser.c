@@ -95,6 +95,10 @@ node_factor_t* parse_factor(token_t** list) {
     } else if(curr->type == TOKEN_LITERAL) {
         fact->type = FACTOR_CONST;
         fact->literal = curr->literal_value;
+    } else if(curr->type == TOKEN_IDENTIFIER) {
+        fact->type = FACTOR_VAR;
+        fact->name = curr->name;
+        curr->name_owner = 0;
     } else goto fail;
 
     *list = curr;
@@ -569,7 +573,7 @@ node_exp_t* parse_exp(token_t** list) {
     ZMALLOC(node_exp_t, exp);
     exp->node.type = NODE_EXPRESSION;
 
-    if(curr->type == TOKEN_IDENTIFIER) {
+    if(curr->type == TOKEN_IDENTIFIER && PEEK(curr)->type == TOKEN_ASSIGN) {
         exp->type = EXP_ASSIGN;
         exp->id = curr->name;
         curr->name_owner = 0;
@@ -621,6 +625,7 @@ void debug_print_node_exp(node_exp_t* exp) {
 
 node_stat_t* parse_statement(token_t** list) {
     token_t* curr = *list;
+    if(curr->type == TOKEN_CLOSE_BRACE) return NULL;
 
     node_stat_t* out;
     ZMALLOC(node_stat_t, out);
@@ -633,8 +638,6 @@ node_stat_t* parse_statement(token_t** list) {
         out->exp = parse_exp(&curr);
         if(!out->exp) goto fail;
         NEXT(curr);
-
-        if(curr->type != TOKEN_SEMICOLON) goto fail;
     } else if(curr->type == TOKEN_BUILTIN_TYPE) {
         out->type = STATEMENT_DECLARE;
 
@@ -654,26 +657,19 @@ node_stat_t* parse_statement(token_t** list) {
         if(!out->exp) goto fail;
         NEXT(curr);
 
-        if(curr->type != TOKEN_SEMICOLON) goto fail;
-
     } else {
         out->type = STATEMENT_EXP;
         out->exp = parse_exp(&curr);
         if(!out->exp) goto fail;
-        NEXT(curr);
-
-        if(curr->type != TOKEN_SEMICOLON) goto fail;        
+        NEXT(curr);     
     }
 
+    if(curr->type != TOKEN_SEMICOLON) goto fail;
+
 out:
-
-    if(PEEK(curr)->type == TOKEN_CLOSE_BRACE) goto done;
     NEXT(curr);
-
     out->next = parse_statement(&curr);
-    if(!out->next) goto fail;    
     
-done:
     *list = curr;
     return out;
 
@@ -682,11 +678,23 @@ fail:
     return NULL;
 }
 
+void free_statement(node_stat_t* stat) {
+    if(stat) {
+        if(stat->exp) free_exp(stat->exp);
+        //if(stat->variable) free(stat->variable);
+        if(stat->next) free_statement(stat->next);
+
+        free(stat);
+    }
+}
+
 void debug_print_node_statement(node_stat_t* node) {
     printf("\tRET "); // TODO:
     debug_print_node_exp(node->exp);
     printf("\n");
 }
+
+// Function
 
 node_func_t* parse_function(token_t** list) {
     token_t* curr = *list;
@@ -716,8 +724,6 @@ node_func_t* parse_function(token_t** list) {
     NEXT(curr);
 
     out->stat = parse_statement(&curr);
-    if(!out->stat) goto fail;
-    NEXT(curr);
     
     if(curr->type != TOKEN_CLOSE_BRACE) goto fail;
 
