@@ -76,7 +76,7 @@ node_factor_t* parse_factor(token_t** list) {
         fact->type = FACTOR_PAREN;
 
         NEXT(curr);
-        fact->exp = parse_expression(&curr);
+        fact->exp = parse_exp_or(&curr);
         if(!fact->exp) goto fail;
         NEXT(curr);
 
@@ -108,7 +108,7 @@ fail:
 void free_factor(node_factor_t* factor) {
     if(factor) {
         if(factor->type == FACTOR_PAREN) {
-            free_expression(factor->exp);
+            free_exp_or(factor->exp);
         } else if(factor->type == FACTOR_UNARY_OP) {
             free_factor(factor->factor);
         }
@@ -122,7 +122,7 @@ void debug_print_node_factor(node_factor_t* factor) {
         printf("%u ", factor->literal);
     } else if(factor->type == FACTOR_PAREN) {
         printf("(");
-        debug_print_node_expression(factor->exp);
+        debug_print_node_exp_or(factor->exp);
         printf(")");
     } else if(factor->type == FACTOR_UNARY_OP) {
         printf("%s ", operator_type_names[factor->operator]);
@@ -496,11 +496,11 @@ void debug_print_node_exp_and(node_exp_and_t* and) {
 
 // OR expressions
 
-node_exp_t* parse_expression(token_t** list) {
+node_exp_or_t* parse_exp_or(token_t** list) {
     token_t* curr = *list;
 
-    node_exp_t* exp;
-    ZMALLOC(node_exp_t, exp);
+    node_exp_or_t* exp;
+    ZMALLOC(node_exp_or_t, exp);
     exp->node.type = NODE_EXPRESSION;
 
     exp->and_exp = parse_exp_and(&curr);
@@ -508,8 +508,8 @@ node_exp_t* parse_expression(token_t** list) {
     if(PEEK(curr)->type != TOKEN_OPERATOR) goto done;
     NEXT(curr);
 
-    ZMALLOC(node_exp_subexp_t, exp->subexps);
-    node_exp_subexp_t* subexp = exp->subexps;
+    ZMALLOC(node_exp_or_subexp_t, exp->subexps);
+    node_exp_or_subexp_t* subexp = exp->subexps;
     while(1) {
         assert(curr->operator_type == OPERATOR_OR);
         NEXT(curr);
@@ -519,7 +519,7 @@ node_exp_t* parse_expression(token_t** list) {
 
         if(PEEK(curr)->type != TOKEN_OPERATOR) break;
         NEXT(curr);
-        ZMALLOC(node_exp_subexp_t, subexp->next);
+        ZMALLOC(node_exp_or_subexp_t, subexp->next);
         subexp = subexp->next;
     }    
 
@@ -528,18 +528,18 @@ done:
     return exp;
 
 fail:
-    free_expression(exp);
+    free_exp_or(exp);
     return NULL;
 }
 
-void free_expression(node_exp_t* exp) {
+void free_exp_or(node_exp_or_t* exp) {
     if(exp) {
         free_exp_and(exp->and_exp);
 
         if(exp->subexps) {
-            node_exp_subexp_t* sub = exp->subexps;
+            node_exp_or_subexp_t* sub = exp->subexps;
             while(sub) {
-                node_exp_subexp_t* next = sub->next;
+                node_exp_or_subexp_t* next = sub->next;
                 free_exp_and(sub->and_exp);
                 free(sub);
                 sub = next;
@@ -550,16 +550,74 @@ void free_expression(node_exp_t* exp) {
     }
 }
 
-void debug_print_node_expression(node_exp_t* exp) {
+void debug_print_node_exp_or(node_exp_or_t* exp) {
     debug_print_node_exp_and(exp->and_exp);
 
-    node_exp_subexp_t* sub = exp->subexps;
+    node_exp_or_subexp_t* sub = exp->subexps;
     while(sub) {
         printf("|| ");
         debug_print_node_exp_and(sub->and_exp);
         sub = sub->next;
     }
 }
+
+// Expressions
+
+node_exp_t* parse_exp(token_t** list) {
+    token_t* curr = *list;
+    node_exp_t* exp;
+    ZMALLOC(node_exp_t, exp);
+    exp->node.type = NODE_EXPRESSION;
+
+    if(curr->type == TOKEN_IDENTIFIER) {
+        exp->type = EXP_ASSIGN;
+        exp->id = curr->name;
+        curr->name_owner = 0;
+        NEXT(curr);
+
+        if(curr->type != TOKEN_ASSIGN) goto fail;
+        NEXT(curr);
+
+        exp->exp = parse_exp(&curr);
+        if(!exp->exp) goto fail;
+    } else {
+        exp->type = EXP_LOGICAL;
+        exp->or_exp = parse_exp_or(&curr);
+        if(!exp->or_exp) goto fail;
+    }
+
+    *list = curr;
+    return exp;
+
+fail:
+    free_exp(exp);
+    return NULL;
+}
+
+void free_exp(node_exp_t* exp) {
+    if(exp) {
+        if(exp->type == EXP_ASSIGN) {
+            free_exp(exp->exp); // TODO: free id
+        } else if(exp->type == EXP_LOGICAL) {
+            free_exp_or(exp->or_exp);
+        }
+
+        free(exp);
+    }
+}
+
+void debug_print_node_exp(node_exp_t* exp) {
+    if(exp->type == EXP_LOGICAL) {
+        debug_print_node_exp_or(exp->or_exp);
+    } else if(exp->type == EXP_ASSIGN) {
+        printf("%s = ", exp->id);
+        debug_print_node_exp(exp->exp);
+    } else {
+        printf("INV ");
+    }
+}
+
+// Statement
 
 node_stat_t* parse_statement(token_t** list) {
     token_t* curr = *list;
@@ -568,17 +626,54 @@ node_stat_t* parse_statement(token_t** list) {
     ZMALLOC(node_stat_t, out);
     out->node.type = NODE_STATEMENT;
 
-    if(curr->type != TOKEN_KEYWORD && curr->keyword_type != KEYWORD_RETURN) goto fail;
-    // out->return_keyword = curr;
+    if(curr->type == TOKEN_KEYWORD && curr->keyword_type == KEYWORD_RETURN) {
+        out->type = STATEMENT_RETURN;
+        NEXT(curr);
+
+        out->exp = parse_exp(&curr);
+        if(!out->exp) goto fail;
+        NEXT(curr);
+
+        if(curr->type != TOKEN_SEMICOLON) goto fail;
+    } else if(curr->type == TOKEN_BUILTIN_TYPE) {
+        out->type = STATEMENT_DECLARE;
+
+        out->builtin_type = curr->builtin_type;
+        NEXT(curr);
+
+        if(curr->type != TOKEN_IDENTIFIER) goto fail;
+        out->variable = curr->name;
+        curr->name_owner = 0;
+        NEXT(curr);
+
+        if(curr->type == TOKEN_SEMICOLON) goto out;
+        if(curr->type != TOKEN_ASSIGN) goto fail;
+        NEXT(curr);
+
+        out->exp = parse_exp(&curr);
+        if(!out->exp) goto fail;
+        NEXT(curr);
+
+        if(curr->type != TOKEN_SEMICOLON) goto fail;
+
+    } else {
+        out->type = STATEMENT_EXP;
+        out->exp = parse_exp(&curr);
+        if(!out->exp) goto fail;
+        NEXT(curr);
+
+        if(curr->type != TOKEN_SEMICOLON) goto fail;        
+    }
+
+out:
+
+    if(PEEK(curr)->type == TOKEN_CLOSE_BRACE) goto done;
     NEXT(curr);
 
-    out->exp = parse_expression(&curr);
-    if(!out->exp) goto fail;
-    NEXT(curr);
-
-    if(curr->type != TOKEN_SEMICOLON) goto fail;
-    // out->semicolon = curr;
+    out->next = parse_statement(&curr);
+    if(!out->next) goto fail;    
     
+done:
     *list = curr;
     return out;
 
@@ -588,8 +683,8 @@ fail:
 }
 
 void debug_print_node_statement(node_stat_t* node) {
-    printf("\tRET ");
-    debug_print_node_expression(node->exp);
+    printf("\tRET "); // TODO:
+    debug_print_node_exp(node->exp);
     printf("\n");
 }
 
@@ -600,7 +695,6 @@ node_func_t* parse_function(token_t** list) {
     ZMALLOC(node_func_t, out);
     out->node.type = NODE_FUNCTION;
 
-    // TODO: do range checking for keyword type
     if(curr->type != TOKEN_BUILTIN_TYPE) goto fail;
     out->return_type = curr->builtin_type;
     NEXT(curr);
@@ -611,15 +705,14 @@ node_func_t* parse_function(token_t** list) {
     NEXT(curr);
 
     if(curr->type != TOKEN_OPEN_PAREN) goto fail;
-    // out->open_paren = curr;
     NEXT(curr);
 
+    // TODO: parameters
+
     if(curr->type != TOKEN_CLOSE_PAREN) goto fail;
-    // out->close_paren = curr;
     NEXT(curr);
     
     if(curr->type != TOKEN_OPEN_BRACE) goto fail;
-    // out->open_brace = curr;
     NEXT(curr);
 
     out->stat = parse_statement(&curr);
@@ -627,7 +720,6 @@ node_func_t* parse_function(token_t** list) {
     NEXT(curr);
     
     if(curr->type != TOKEN_CLOSE_BRACE) goto fail;
-    // out->close_brace = curr;
 
     *list = curr;
     return out;

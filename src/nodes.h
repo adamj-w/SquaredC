@@ -11,6 +11,7 @@
 
 // UNARY OPS, LITERALS, and PARENS
 
+// TODO: variable type
 typedef enum factor_type_e {
     FACTOR_INVALID,
     FACTOR_PAREN,
@@ -28,7 +29,7 @@ typedef struct AST_factor_s {
             operator_type operator;
             struct AST_factor_s* factor;
         };
-        struct AST_expression_s* exp;
+        struct AST_exp_or_s* exp;
         unsigned int literal;
     };
 } node_factor_t;
@@ -140,29 +141,68 @@ void debug_print_node_exp_and(node_exp_and_t* exp);
 
 // OR
 
-typedef struct AST_expression_subexpression_s {
+typedef struct AST_exp_or_subexpression_s {
     struct AST_exp_and_s* and_exp;
-    struct AST_expression_subexpression_s* next;
-} node_exp_subexp_t;
+    struct AST_exp_or_subexpression_s* next;
+} node_exp_or_subexp_t;
+
+typedef struct AST_exp_or_s {
+    node_t node;
+
+    struct AST_exp_and_s* and_exp;
+
+    node_exp_or_subexp_t* subexps;
+} node_exp_or_t;
+
+node_exp_or_t* parse_exp_or(token_t** list);
+void free_exp_or(node_exp_or_t* exp);
+void debug_print_node_exp_or(node_exp_or_t* exp);
+
+// ASSIGN or OTHER_EXP
+
+typedef enum expression_type_s {
+    EXP_INVALID,
+    EXP_ASSIGN,
+    EXP_LOGICAL,
+    EXP_TYPE_COUNT,
+} node_exp_type;
 
 typedef struct AST_expression_s {
     node_t node;
+    node_exp_type type;
 
-    struct AST_exp_and_s* and_exp;
-
-    node_exp_subexp_t* subexps;
+    union {
+        struct {
+            const char* id; // TODO: identifier stuff
+            struct AST_expression_s* exp;
+        };
+        node_exp_or_t* or_exp;
+    };
 } node_exp_t;
 
-node_exp_t* parse_expression(token_t** list);
-void free_expression(node_exp_t* exp);
-void debug_print_node_expression(node_exp_t* exp);
+node_exp_t* parse_exp(token_t** list);
+void free_exp(node_exp_t* exp);
+void debug_print_node_exp(node_exp_t* exp);
+
+// Statement (actual code)
+
+typedef enum statement_type_e {
+    STATEMENT_INVALID,
+    STATEMENT_RETURN,
+    STATEMENT_DECLARE,
+    STATEMENT_EXP,
+    STATEMENT_TYPE_COUNT,
+} stat_type;
 
 typedef struct AST_statement_s {
     node_t node;
-    
-    //token_t* return_keyword;
+    stat_type type;
+
+    builtin_type builtin_type;
+    const char* variable;
     node_exp_t* exp;
-    //token_t* semicolon;
+
+    struct AST_statement_s* next;
 } node_stat_t;
 
 node_stat_t* parse_statement(token_t** list);

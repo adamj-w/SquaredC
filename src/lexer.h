@@ -15,6 +15,7 @@
     __item(OPEN_PAREN, _uargs) \
     __item(CLOSE_PAREN, _uargs) \
     __item(SEMICOLON, _uargs) \
+    __item(ASSIGN, _uargs) \
     __item(BUILTIN_TYPE, _uargs) \
     __item(OPERATOR, _uargs) \
     __item(KEYWORD, _uargs) \

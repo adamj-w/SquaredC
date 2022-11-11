@@ -17,28 +17,13 @@ bool generate_asm(FILE* fp, node_root_t* root) {
     data.fp = fp;
     data.label_index = 0;
 
-    // Need to traverse as a tree
     node_t* curr = root->functions;
     while(curr) {
         if(!ga_function(&data, (node_func_t*)curr)) return false;
         curr = curr->next;
-        // switch(curr->type) {
-        // case NODE_FUNCTION:
-        //     node_func_t* func = (node_func_t*)curr;
-        //     fprintf(fp, ".globl %s\n%s:\n", func->function_name->name, func->function_name->name);
-        //     curr = (node_t*)func->stat;
-        //     continue;
-        // case NODE_STATEMENT:
-        //     node_stat_t* stat = (node_stat_t*)curr;
-        //     fprintf(fp, "\tmovl $%u, %%eax\n\tret\n", stat->exp->literal_value);
-        //     break;
-        // default:
-        //     break;
-        // }
-        // curr = curr->next;
     }
 
-    return true; // TODO: change back
+    return true;
 }
 
 bool ga_function(ga_data_t* data, node_func_t* func) {
@@ -56,11 +41,11 @@ bool ga_statement(ga_data_t* data, node_stat_t* stat) {
 
 // }
 
-bool ga_expression(ga_data_t* data, node_exp_t* exp) {
+bool ga_expression(ga_data_t* data, node_exp_or_t* exp) {
     if(!ga_exp_and(data, exp->and_exp)) return false;
 
     // TODO:
-    node_exp_subexp_t* sub = exp->subexps;
+    node_exp_or_subexp_t* sub = exp->subexps;
     while(sub) {
         size_t currIndex = data->label_index++;
         fprintf(data->fp, "\tcmpl\t$0, %%eax\n\tje\t\t.o%02lu\n\tmovl\t$1, %%eax\n\tjmp\t\t.oe%02lu\n.o%02lu:\n", currIndex, currIndex, currIndex);

@@ -80,10 +80,14 @@ token_t* lex(const char* content, size_t len) {
             continue;
         }
 
-        if(c == '=' && n == '=') {
-            curr->type = TOKEN_OPERATOR;
-            curr->operator_type = OPERATOR_EQUALS;
-            i++;
+        if(c == '=') {
+            if(n == '=') {
+                curr->type = TOKEN_OPERATOR;
+                curr->operator_type = OPERATOR_EQUALS;
+                i++;
+            } else {
+                curr->type = TOKEN_ASSIGN;
+            }
             CREATE_NEXT(curr);
             continue;
         }
@@ -220,6 +224,8 @@ token_t* lex(const char* content, size_t len) {
                     break;
                 }
             }
+
+            // FIXME: DON'T realloc already used identifiers
 
             curr->type = TOKEN_IDENTIFIER;
             curr->name = (char*)malloc(j - i + 1); // USE LESS MALLOC (create cache)

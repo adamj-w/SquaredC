@@ -20,7 +20,7 @@ bool ga_function(ga_data_t* data, node_func_t* func);
 bool ga_statement(ga_data_t* data, node_stat_t* stat);
 
 //bool ga_subexpression(ga_data_t* data, node_exp_subexp_t* sub);
-bool ga_expression(ga_data_t* data, node_exp_t* exp);
+bool ga_expression(ga_data_t* data, node_exp_or_t* exp);
 
 bool ga_exp_and(ga_data_t* data, node_exp_and_t* and);
 
