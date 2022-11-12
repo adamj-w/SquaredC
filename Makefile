@@ -6,14 +6,16 @@ CWD=${shell pwd}
 OUTDIR=$(CWD)/build
 SRCDIR=$(CWD)/src
 
-BINARY=$(OUTDIR)/hcc
+BINARY=$(OUTDIR)/cxc
 
-LDFLAGS:=-O3 -g
+LDFLAGS:=-g # dev flags
+LDFLAGS:=$(LDFLAGS) -O3 # prod flags
 
-CFLAGS:=-g -Werror -Wall -Wextra -Wno-unused-parameter
+CFLAGS:=-g -Werror -Wall -Wpedantic -Wextra -Wno-unused-parameter -fanalyzer # all dev flags
+CFLAGS:=$(CFLAGS) -MMD # all prod flags
 
-HCC_SOURCES=$(wildcard $(SRCDIR)/*.c)
-HCC_OBJECTS=$(patsubst $(SRCDIR)/%,$(OUTDIR)/%.o,$(HCC_SOURCES))
+CXC_SOURCES=$(wildcard $(SRCDIR)/*.c)
+CXC_OBJECTS=$(patsubst $(SRCDIR)/%,$(OUTDIR)/%.o,$(CXC_SOURCES))
 
 all: $(BINARY)
 
@@ -31,7 +33,7 @@ test-all: $(BINARY)
 clean:
 	@rm -r $(OUTDIR)
 
-$(BINARY): $(HCC_OBJECTS)
+$(BINARY): $(CXC_OBJECTS)
 	$(DIRECTORY_GUARD)
 	@echo [LD] $@
 	@gcc $(LDFLAGS) $^ -o $@
@@ -41,4 +43,4 @@ $(OUTDIR)/%.c.o: $(SRCDIR)/%.c
 	@echo [CC] $@
 	@gcc -c $(CFLAGS) -o $@ $<
 
--include $(HCC_OBJECTS:.o=.d)
+-include $(CXC_OBJECTS:.o=.d)

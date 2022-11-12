@@ -59,7 +59,7 @@ fail:
 
     if(verbose > 1) printf("\n%s\n\n\n", &data[0]);
 
-    token_t* tokens = lex(data, len);
+    token_list_t* tokens = lex(data, len);
     free(data);
 
     if(!tokens) { 
@@ -71,8 +71,8 @@ fail:
         printf("\n\n");
     }
 
-    node_root_t* root = parse(tokens);
     free_token_list(tokens);
+    /*node_root_t* root = parse(tokens);
     if(!root) {
         printf("Failed to parse file\n");
         exit(-1);
@@ -110,6 +110,6 @@ fail:
         remove(outassembly);
     }
 
-    free(outassembly);
+    free(outassembly);*/
     exit(0);
 }

@@ -14,17 +14,19 @@
 #define STIRNG_LIST_ITEM(__value, _) #__value,
 
 typedef struct token_s token_t;
+typedef struct token_list_s token_list_t;
 
 typedef struct AST_node_s node_t;
 typedef struct AST_root_s node_root_t;
 
 #define ZMALLOC(_type, _name) \
-    _name = (_type*)malloc(sizeof(_type)); \
-    memset(_name, 0, sizeof(_type))
+    _name = (_type*)calloc(1, sizeof(_type)); \
+    assert(_name != NULL)
 
 
 #define BUILTIN_TYPE_LIST(__item, _uargs) \
     __item(INVALID, _uargs) \
+    __item(UNKNOWN, _uargs) \
     __item(INT, _uargs)
 
 enum builtin_type_e {
@@ -69,5 +71,8 @@ typedef enum keyword_type_e {
     KEYWORD_TYPE_COUNT
 } keyword_type;
 extern const char* keyword_type_names[KEYWORD_TYPE_COUNT];
+
+typedef struct identifier_s ident_t;
+typedef struct identifier_array_s ident_array_t;
 
 #endif

@@ -36,10 +36,7 @@ struct token_s {
         builtin_type builtin_type;
         keyword_type keyword_type;
         operator_type operator_type;
-        struct {
-            char* name;
-            int name_owner;
-        };
+        size_t id_index;
         unsigned int literal_value;
     };
     struct token_s* next;
@@ -47,10 +44,15 @@ struct token_s {
 };
 typedef struct token_s token_t;
 
-token_t* lex(const char* content, size_t len);
+typedef struct token_list_s {
+    token_t* head;
+    ident_array_t* ids;
+} token_list_t;
 
-void free_token_list(token_t* head);
+token_list_t* lex(const char* content, size_t len);
 
-void debug_print_list(token_t* head);
+void free_token_list(token_list_t* list);
+
+void debug_print_list(token_list_t* list);
 
 #endif

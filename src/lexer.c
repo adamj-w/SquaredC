@@ -13,6 +13,8 @@
 
 #include "fwd.h"
 
+#include "identifier.h"
+
 const char* token_type_names[TOKEN_TYPE_COUNT] = {
     TOKEN_TYPE_LIST(STIRNG_LIST_ITEM, _)
 };
@@ -34,13 +36,17 @@ const char* keyword_type_names[KEYWORD_TYPE_COUNT] = {
             _curr->next->prev = _curr; \
             _curr = _curr->next
 
-token_t* lex(const char* content, size_t len) {
+token_list_t* lex(const char* content, size_t len) {
     assert(len > 0);
     assert(content);
 
-    token_t* head;
-    ZMALLOC(token_t, head);
-    token_t* curr = head;
+    token_list_t* list = malloc(sizeof(token_list_t));
+    assert(list);
+
+    list->ids = create_id_arr_c(5);
+
+    ZMALLOC(token_t, list->head);
+    token_t* curr = list->head;
     for(size_t i = 0; i < len; ++i) {
         char c = content[i], n = 0;
         if(i < len) n = content[i + 1];
@@ -225,13 +231,8 @@ token_t* lex(const char* content, size_t len) {
                 }
             }
 
-            // FIXME: DON'T realloc already used identifiers
-
             curr->type = TOKEN_IDENTIFIER;
-            curr->name = (char*)malloc(j - i + 1); // USE LESS MALLOC (create cache)
-            curr->name_owner = 1;
-            strncpy(curr->name, &content[i], j - i);
-            curr->name[j-i] = '\0';
+            curr->id_index = id_arr_find_or_create(list->ids, BUILTIN_UNKNOWN, &content[i], j-i);
             CREATE_NEXT(curr);
             i = j-1;
             continue;
@@ -245,33 +246,36 @@ token_t* lex(const char* content, size_t len) {
         free(curr);
     }
 
-    return head;
+    return list;
 
 fail:
-    free_token_list(head);
+    free_token_list(list);
     return NULL;
 }
 
-void free_token_list(token_t* head) {
-    token_t* curr = head;
-    token_t* next;
-    while(curr) {
-        next = curr->next;
-        if(curr->type == TOKEN_IDENTIFIER) {
-            if(curr->name_owner && curr->name) free(curr->name);
+void free_token_list(token_list_t* list) {
+    if(list) {
+        token_t* curr = list->head;
+        token_t* next;
+        while(curr) {
+            next = curr->next;
+            free(curr);
+            curr = next;
         }
-        free(curr);
-        curr = next;
+
+        free_id_arr(list->ids);
+
+        free(list);
     }
 }
 
-void debug_print_list(token_t* head) {
-    token_t* curr = head;
+void debug_print_list(token_list_t* list) {
+    token_t* curr = list->head;
     while(curr) {
         printf("%s ", token_type_names[curr->type]);
         switch(curr->type) {
         case TOKEN_IDENTIFIER:
-            printf("\"%s\"\n", curr->name);
+            printf("\"%s\"\n", id_arr_get_name(list->ids, curr->id_index));
             break;
         case TOKEN_LITERAL:
             printf("%u\n", curr->literal_value);

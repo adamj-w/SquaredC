@@ -1,4 +1,4 @@
-# C*
+# C^2
 
 ## by Adam Warren
 
