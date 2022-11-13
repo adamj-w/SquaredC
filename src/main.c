@@ -13,6 +13,7 @@
 #include <string.h>
 
 #include "asm_gen.h"
+#include "identifier.h"
 
 #include <assert.h>
 
@@ -67,20 +68,22 @@ fail:
         exit(-1);
     }
     if(verbose) { 
-        debug_print_list(tokens);
+        token_list_print(tokens);
         printf("\n\n");
     }
 
-    free_token_list(tokens);
-    /*node_root_t* root = parse(tokens);
+    node_root_t* root = parse(tokens);
+    token_list_free(tokens); // TODO: need to save ids list
     if(!root) {
         printf("Failed to parse file\n");
         exit(-1);
     }
 
-    if(verbose) {debug_print_node_tree(root);}
+    if(verbose) {
+        node_root_print(root);
+    }
 
-    argv[1][strlen(argv[1]) - 2] = '\0';
+    /*argv[1][strlen(argv[1]) - 2] = '\0';
 
     size_t outfile_len = strlen(argv[1]) + 2;
     char* outassembly = (char*)malloc(outfile_len + 1);
@@ -97,7 +100,7 @@ fail:
 
     fclose(fp);
 
-    free_root_node(root);
+    node_root_free(root);
 
     if(success) {
         size_t cmd_len = 14 + outfile_len + outfile_len - 3 + 200;

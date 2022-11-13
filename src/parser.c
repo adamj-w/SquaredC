@@ -7,20 +7,26 @@
 #include "nodes.h"
 
 #include "lexer.h"
+#include "identifier.h"
 
 #include <assert.h>
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
 
-node_root_t* parse(token_t* tokens) {
-    assert(tokens);
+node_root_t* parse(token_list_t* list) {
+    assert(list);
 
     node_root_t* root;
     ZMALLOC(node_root_t, root);
 
-    token_t* curr = tokens;
-    root->functions = (node_t*)parse_function(&curr);
+    parse_args_t args;
+    args.token_ids = list->ids;
+    args.global_ids = create_id_arr_c(5);
+    root->global_ids = args.global_ids;
+
+    token_t* curr = list->head;
+    root->functions = (node_t*)parse_function(&args, &curr);
 
     if(!root->functions) {
         free(root);
@@ -30,7 +36,7 @@ node_root_t* parse(token_t* tokens) {
     return root;
 }
 
-void free_root_node(node_root_t* root) {
+void node_root_free(node_root_t* root) {
     assert(root);
 
     // TODO: names are still left floating for identifiers
@@ -46,8 +52,10 @@ void free_root_node(node_root_t* root) {
     free(root);
 }
 
-void debug_print_node_tree(node_root_t* root) {
+void node_root_print(node_root_t* root) {
     assert(root);
+
+    id_arr_debug_print(root->global_ids);
 
     node_t* curr = root->functions;
     while(curr) {
@@ -66,7 +74,7 @@ void debug_print_node_tree(node_root_t* root) {
 #define NEXT(_curr) if(!_curr->next) goto fail; else _curr = _curr->next
 #define PEEK(_curr) _curr->next && _curr->next
 
-node_factor_t* parse_factor(token_t** list) {
+node_factor_t* parse_factor(parse_args_t* args, token_t** list) {
     token_t* curr = *list;
     node_factor_t* fact;
     ZMALLOC(node_factor_t, fact);
@@ -76,7 +84,7 @@ node_factor_t* parse_factor(token_t** list) {
         fact->type = FACTOR_PAREN;
 
         NEXT(curr);
-        fact->exp = parse_exp_or(&curr);
+        fact->exp = parse_exp_or(args, &curr);
         if(!fact->exp) goto fail;
         NEXT(curr);
 
@@ -90,15 +98,14 @@ node_factor_t* parse_factor(token_t** list) {
         fact->operator = curr->operator_type;
         NEXT(curr);
 
-        fact->factor = parse_factor(&curr);
+        fact->factor = parse_factor(args, &curr);
         if(!fact->factor) goto fail;
     } else if(curr->type == TOKEN_LITERAL) {
         fact->type = FACTOR_CONST;
         fact->literal = curr->literal_value;
     } else if(curr->type == TOKEN_IDENTIFIER) {
         fact->type = FACTOR_VAR;
-        fact->name = curr->name;
-        curr->name_owner = 0;
+        fact->id = id_arr_find_p(args->function_ids, args->token_ids->ids[curr->id_index].id_hash);
     } else goto fail;
 
     *list = curr;
@@ -123,27 +130,29 @@ void free_factor(node_factor_t* factor) {
 
 void debug_print_node_factor(node_factor_t* factor) {
     if(factor->type == FACTOR_CONST) {
-        printf("%u ", factor->literal);
+        printf("%u", factor->literal);
     } else if(factor->type == FACTOR_PAREN) {
         printf("(");
         debug_print_node_exp_or(factor->exp);
         printf(")");
     } else if(factor->type == FACTOR_UNARY_OP) {
-        printf("%s ", operator_type_names[factor->operator]);
+        printf("%s", operator_type_names[factor->operator]);
         debug_print_node_factor(factor->factor);
+    } else if(factor->type == FACTOR_VAR) {
+        printf("%s", factor->id->name);
     } else {
         printf("ERR");
     }
 }
 
-node_term_t* parse_term(token_t** list) {
+node_term_t* parse_term(parse_args_t* args, token_t** list) {
     token_t* curr = *list;
 
     node_term_t* term;
     ZMALLOC(node_term_t, term);
     term->node.type = NODE_TERM;
 
-    term->factor = parse_factor(&curr);
+    term->factor = parse_factor(args, &curr);
     if(!term->factor) goto fail;
     token_t* peek = curr->next;
     if(!peek || peek->type != TOKEN_OPERATOR) goto done;
@@ -157,7 +166,7 @@ node_term_t* parse_term(token_t** list) {
         sub->operator = curr->operator_type;
         NEXT(curr);
 
-        sub->factor = parse_factor(&curr);
+        sub->factor = parse_factor(args, &curr);
         if(!sub->factor) goto fail;
         peek = curr->next;
 
@@ -209,14 +218,14 @@ void debug_print_node_term(node_term_t* term) {
 
 // ADD, expressions
 
-node_exp_sum_t* parse_exp_sum(token_t** list) {
+node_exp_sum_t* parse_exp_sum(parse_args_t* args, token_t** list) {
     token_t* curr = *list;
 
     node_exp_sum_t* sum;
     ZMALLOC(node_exp_sum_t, sum);
     sum->node.type = NODE_EXPRESSION;
 
-    sum->term = parse_term(&curr);
+    sum->term = parse_term(args, &curr);
     if(!sum->term) goto fail;
     token_t* peek = curr->next;
     if(!peek || peek->type != TOKEN_OPERATOR) goto done;
@@ -230,7 +239,7 @@ node_exp_sum_t* parse_exp_sum(token_t** list) {
         subexp->operator = curr->operator_type;
         NEXT(curr);
 
-        subexp->term = parse_term(&curr);
+        subexp->term = parse_term(args, &curr);
         if(!subexp->term) goto fail;
 
         peek = curr->next;
@@ -282,14 +291,14 @@ void debug_print_node_exp_sum(node_exp_sum_t* sum) {
 
 // GREATER_THAN, etc expressions
 
-node_exp_relation_t* parse_exp_relation(token_t** list) {
+node_exp_relation_t* parse_exp_relation(parse_args_t* args, token_t** list) {
     token_t* curr = *list;
 
     node_exp_relation_t* relation;
     ZMALLOC(node_exp_relation_t, relation);
     relation->node.type = NODE_EXPRESSION;
 
-    relation->sum = parse_exp_sum(&curr);
+    relation->sum = parse_exp_sum(args, &curr);
     if(!relation->sum) goto fail;
     token_t* peek = curr->next;
     if(!peek || peek->type != TOKEN_OPERATOR) goto done;
@@ -303,7 +312,7 @@ node_exp_relation_t* parse_exp_relation(token_t** list) {
         subexp->relation = curr->operator_type;
         NEXT(curr);
 
-        subexp->sum = parse_exp_sum(&curr);
+        subexp->sum = parse_exp_sum(args, &curr);
         if(!subexp->sum) goto fail;
 
         peek = curr->next;
@@ -355,14 +364,14 @@ void debug_print_node_exp_relation(node_exp_relation_t* relation) {
 
 // EQUALS expressions
 
-node_exp_equals_t* parse_exp_equals(token_t** list) {
+node_exp_equals_t* parse_exp_equals(parse_args_t* args, token_t** list) {
     token_t* curr = *list;
 
     node_exp_equals_t* equals;
     ZMALLOC(node_exp_equals_t, equals);
     equals->node.type = NODE_EXPRESSION;
 
-    equals->relation = parse_exp_relation(&curr);
+    equals->relation = parse_exp_relation(args, &curr);
     if(!equals->relation) goto fail;
     token_t* peek = curr->next;
     if(!peek || peek->type != TOKEN_OPERATOR) goto done;
@@ -376,7 +385,7 @@ node_exp_equals_t* parse_exp_equals(token_t** list) {
         subexp->operator = curr->operator_type;
         NEXT(curr);
 
-        subexp->relation = parse_exp_relation(&curr);
+        subexp->relation = parse_exp_relation(args, &curr);
         if(!subexp->relation) goto fail;
 
         peek = curr->next;
@@ -428,14 +437,14 @@ void debug_print_node_exp_equals(node_exp_equals_t* equals) {
 
 // AND expressions
 
-node_exp_and_t* parse_exp_and(token_t** list) {
+node_exp_and_t* parse_exp_and(parse_args_t* args, token_t** list) {
     token_t* curr = *list;
 
     node_exp_and_t* and;
     ZMALLOC(node_exp_and_t, and);
     and->node.type = NODE_EXPRESSION;
 
-    and->equals = parse_exp_equals(&curr);
+    and->equals = parse_exp_equals(args, &curr);
     if(!and->equals) goto fail;
     token_t* peek = curr->next;
     if(!peek || peek->type != TOKEN_OPERATOR) goto done;
@@ -448,7 +457,7 @@ node_exp_and_t* parse_exp_and(token_t** list) {
         assert(curr->operator_type == OPERATOR_AND);
         NEXT(curr);
 
-        subexp->equals = parse_exp_equals(&curr);
+        subexp->equals = parse_exp_equals(args, &curr);
         if(!subexp->equals) goto fail;
 
         peek = curr->next;
@@ -500,14 +509,14 @@ void debug_print_node_exp_and(node_exp_and_t* and) {
 
 // OR expressions
 
-node_exp_or_t* parse_exp_or(token_t** list) {
+node_exp_or_t* parse_exp_or(parse_args_t* args, token_t** list) {
     token_t* curr = *list;
 
     node_exp_or_t* exp;
     ZMALLOC(node_exp_or_t, exp);
     exp->node.type = NODE_EXPRESSION;
 
-    exp->and_exp = parse_exp_and(&curr);
+    exp->and_exp = parse_exp_and(args, &curr);
     if(!exp->and_exp) goto fail;
     if(PEEK(curr)->type != TOKEN_OPERATOR) goto done;
     NEXT(curr);
@@ -518,7 +527,7 @@ node_exp_or_t* parse_exp_or(token_t** list) {
         assert(curr->operator_type == OPERATOR_OR);
         NEXT(curr);
 
-        subexp->and_exp = parse_exp_and(&curr);
+        subexp->and_exp = parse_exp_and(args, &curr);
         if(!subexp->and_exp) goto fail;
 
         if(PEEK(curr)->type != TOKEN_OPERATOR) break;
@@ -567,7 +576,7 @@ void debug_print_node_exp_or(node_exp_or_t* exp) {
 
 // Expressions
 
-node_exp_t* parse_exp(token_t** list) {
+node_exp_t* parse_exp(parse_args_t* args, token_t** list) {
     token_t* curr = *list;
     node_exp_t* exp;
     ZMALLOC(node_exp_t, exp);
@@ -575,18 +584,18 @@ node_exp_t* parse_exp(token_t** list) {
 
     if(curr->type == TOKEN_IDENTIFIER && PEEK(curr)->type == TOKEN_ASSIGN) {
         exp->type = EXP_ASSIGN;
-        exp->id = curr->name;
-        curr->name_owner = 0;
+        exp->id = id_arr_find_p(args->function_ids, args->token_ids->ids[curr->id_index].id_hash);
+        // TODO: select globals too
         NEXT(curr);
 
         if(curr->type != TOKEN_ASSIGN) goto fail;
         NEXT(curr);
 
-        exp->exp = parse_exp(&curr);
+        exp->exp = parse_exp(args, &curr);
         if(!exp->exp) goto fail;
     } else {
         exp->type = EXP_LOGICAL;
-        exp->or_exp = parse_exp_or(&curr);
+        exp->or_exp = parse_exp_or(args, &curr);
         if(!exp->or_exp) goto fail;
     }
 
@@ -614,7 +623,7 @@ void debug_print_node_exp(node_exp_t* exp) {
     if(exp->type == EXP_LOGICAL) {
         debug_print_node_exp_or(exp->or_exp);
     } else if(exp->type == EXP_ASSIGN) {
-        printf("%s = ", exp->id);
+        printf("%s = ", exp->id->name);
         debug_print_node_exp(exp->exp);
     } else {
         printf("INV ");
@@ -623,7 +632,7 @@ void debug_print_node_exp(node_exp_t* exp) {
 
 // Statement
 
-node_stat_t* parse_statement(token_t** list) {
+node_stat_t* parse_statement(parse_args_t* args, token_t** list) {
     token_t* curr = *list;
     if(curr->type == TOKEN_CLOSE_BRACE) return NULL;
 
@@ -635,7 +644,7 @@ node_stat_t* parse_statement(token_t** list) {
         out->type = STATEMENT_RETURN;
         NEXT(curr);
 
-        out->exp = parse_exp(&curr);
+        out->exp = parse_exp(args, &curr);
         if(!out->exp) goto fail;
         NEXT(curr);
     } else if(curr->type == TOKEN_BUILTIN_TYPE) {
@@ -645,21 +654,25 @@ node_stat_t* parse_statement(token_t** list) {
         NEXT(curr);
 
         if(curr->type != TOKEN_IDENTIFIER) goto fail;
-        out->variable = curr->name;
-        curr->name_owner = 0;
+        out->variable = id_arr_fcreate_cstr_p(
+            (args->function_ids != NULL) ? args->function_ids : args->global_ids,
+            out->builtin_type,
+            id_arr_get_name(args->token_ids, curr->id_index)
+        );
+        id_set_type(out->variable, out->builtin_type);
         NEXT(curr);
 
         if(curr->type == TOKEN_SEMICOLON) goto out;
         if(curr->type != TOKEN_ASSIGN) goto fail;
         NEXT(curr);
 
-        out->exp = parse_exp(&curr);
+        out->exp = parse_exp(args, &curr);
         if(!out->exp) goto fail;
         NEXT(curr);
 
     } else {
         out->type = STATEMENT_EXP;
-        out->exp = parse_exp(&curr);
+        out->exp = parse_exp(args, &curr);
         if(!out->exp) goto fail;
         NEXT(curr);     
     }
@@ -668,7 +681,7 @@ node_stat_t* parse_statement(token_t** list) {
 
 out:
     NEXT(curr);
-    out->next = parse_statement(&curr);
+    out->next = parse_statement(args, &curr);
     
     *list = curr;
     return out;
@@ -688,15 +701,32 @@ void free_statement(node_stat_t* stat) {
     }
 }
 
-void debug_print_node_statement(node_stat_t* node) {
-    printf("\tRET "); // TODO:
-    debug_print_node_exp(node->exp);
-    printf("\n");
+void debug_print_node_statement(node_stat_t* stat) {
+    if(stat->type == STATEMENT_RETURN) {
+        printf("\treturn ");
+        if(stat->exp) debug_print_node_exp(stat->exp);
+        printf(";\n");
+    } else if(stat->type == STATEMENT_DECLARE) {
+        printf("\t%s %s", builtin_type_names[stat->builtin_type], stat->variable->name);
+        if(stat->exp) {
+            printf(" = ");
+            debug_print_node_exp(stat->exp);
+        }
+        printf(";\n");
+    } else if(stat->type == STATEMENT_EXP) {
+        printf("\t");
+        debug_print_node_exp(stat->exp);
+        printf(";\n");
+    } else {
+        printf("\tINV");
+    }
+
+    if(stat->next) debug_print_node_statement(stat->next);
 }
 
 // Function
 
-node_func_t* parse_function(token_t** list) {
+node_func_t* parse_function(parse_args_t* args, token_t** list) {
     token_t* curr = *list;
 
     node_func_t* out;
@@ -708,8 +738,9 @@ node_func_t* parse_function(token_t** list) {
     NEXT(curr);
 
     if(curr->type != TOKEN_IDENTIFIER) goto fail;
-    out->function_name = curr->name;
-    curr->name_owner = 0;
+    // TODO: find if id is already used
+    out->function_id = id_arr_fcreate_cstr_p(args->global_ids, BUILTIN_FUNC, id_arr_get_name(args->token_ids, curr->id_index));
+    id_set_type(out->function_id, BUILTIN_FUNC);
     NEXT(curr);
 
     if(curr->type != TOKEN_OPEN_PAREN) goto fail;
@@ -723,7 +754,10 @@ node_func_t* parse_function(token_t** list) {
     if(curr->type != TOKEN_OPEN_BRACE) goto fail;
     NEXT(curr);
 
-    out->stat = parse_statement(&curr);
+    out->ids = create_id_arr_c(5);
+    args->function_ids = out->ids;
+
+    out->stat = parse_statement(args, &curr);
     
     if(curr->type != TOKEN_CLOSE_BRACE) goto fail;
 
@@ -734,10 +768,22 @@ fail:
     return NULL;
 }
 
+void free_function(node_func_t* func) {
+    if(func) {
+        if(func->ids) free_id_arr(func->ids);
+        if(func->stat) free_statement(func->stat);
+
+        free(func);
+    }
+}
+
 void debug_print_node_function(node_func_t* node) {
-    printf("Name: \"%s\", Returns: %s, Params: \"\", Body: \n", 
-        node->function_name, 
+    printf("Name: \"%s\", Returns: %s, Params: \"\", Body: {\n", 
+        node->function_id->name, 
         builtin_type_names[node->return_type]);
+
+    id_arr_debug_print(node->ids);
     
-    debug_print_node_statement(node->stat);
+    if(node->stat) debug_print_node_statement(node->stat);
+    printf("}\n");
 }

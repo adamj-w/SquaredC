@@ -11,7 +11,7 @@ BINARY=$(OUTDIR)/cxc
 LDFLAGS:=-g # dev flags
 LDFLAGS:=$(LDFLAGS) -O3 # prod flags
 
-CFLAGS:=-g -Werror -Wall -Wpedantic -Wextra -Wno-unused-parameter -fanalyzer # all dev flags
+CFLAGS:=-g -Werror -Wall -Wpedantic -Wextra -Wno-unused-parameter #-fanalyzer # all dev flags
 CFLAGS:=$(CFLAGS) -MMD # all prod flags
 
 CXC_SOURCES=$(wildcard $(SRCDIR)/*.c)

@@ -8,6 +8,8 @@
 #include "parser.h"
 #include "lexer.h"
 
+#include "identifier.h"
+
 #include <assert.h>
 
 bool generate_asm(FILE* fp, node_root_t* root) {
@@ -27,7 +29,7 @@ bool generate_asm(FILE* fp, node_root_t* root) {
 }
 
 bool ga_function(ga_data_t* data, node_func_t* func) {
-    fprintf(data->fp, ".globl %s\n%s:\n", func->function_name, func->function_name);
+    fprintf(data->fp, ".globl %s\n%s:\n", func->function_id->name, func->function_id->name);
     return ga_statement(data, func->stat);
 }
 

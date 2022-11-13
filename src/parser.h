@@ -38,12 +38,13 @@ typedef struct AST_node_s node_t;
 typedef struct AST_root_s {
     node_t node;
 
+    ident_array_t* global_ids;
     node_t* functions;
 } node_root_t;
 
-node_root_t* parse(token_t* head);
-void free_root_node(node_root_t* root);
+node_root_t* parse(token_list_t* list);
+void node_root_free(node_root_t* root);
 
-void debug_print_node_tree(node_root_t* root);
+void node_root_print(node_root_t* root);
 
 #endif

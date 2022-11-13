@@ -27,7 +27,8 @@ typedef struct AST_root_s node_root_t;
 #define BUILTIN_TYPE_LIST(__item, _uargs) \
     __item(INVALID, _uargs) \
     __item(UNKNOWN, _uargs) \
-    __item(INT, _uargs)
+    __item(INT, _uargs) \
+    __item(FUNC, _uargs)
 
 enum builtin_type_e {
     BUILTIN_TYPE_LIST(ENUM_LIST_ITEM, BUILTIN_)

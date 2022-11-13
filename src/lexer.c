@@ -232,7 +232,7 @@ token_list_t* lex(const char* content, size_t len) {
             }
 
             curr->type = TOKEN_IDENTIFIER;
-            curr->id_index = id_arr_find_or_create(list->ids, BUILTIN_UNKNOWN, &content[i], j-i);
+            curr->id_index = id_arr_find_or_create_substr_i(list->ids, BUILTIN_UNKNOWN, &content[i], j-i);
             CREATE_NEXT(curr);
             i = j-1;
             continue;
@@ -249,11 +249,11 @@ token_list_t* lex(const char* content, size_t len) {
     return list;
 
 fail:
-    free_token_list(list);
+    token_list_free(list);
     return NULL;
 }
 
-void free_token_list(token_list_t* list) {
+void token_list_free(token_list_t* list) {
     if(list) {
         token_t* curr = list->head;
         token_t* next;
@@ -269,7 +269,9 @@ void free_token_list(token_list_t* list) {
     }
 }
 
-void debug_print_list(token_list_t* list) {
+void token_list_print(token_list_t* list) {
+    id_arr_debug_print(list->ids);
+
     token_t* curr = list->head;
     while(curr) {
         printf("%s ", token_type_names[curr->type]);

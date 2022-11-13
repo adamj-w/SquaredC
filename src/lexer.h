@@ -51,8 +51,8 @@ typedef struct token_list_s {
 
 token_list_t* lex(const char* content, size_t len);
 
-void free_token_list(token_list_t* list);
+void token_list_free(token_list_t* list);
 
-void debug_print_list(token_list_t* list);
+void token_list_print(token_list_t* list);
 
 #endif
